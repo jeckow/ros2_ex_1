@@ -1,0 +1,348 @@
+#include "rclcpp/rclcpp.hpp"
+#include "turtlesim/srv/set_pen.hpp"                // for toggling the pen
+#include "turtlesim/srv/teleport_absolute.hpp"      // for drawing the lines
+#include "turtlesim/srv/spawn.hpp"                  // for creating turtle2
+#include "turtlesim/msg/pose.hpp"                   // for checking position of turtle1
+#include "geometry_msgs/msg/twist.hpp"              // for rotating turtle2 in place
+#include "turtle_interfaces/msg/rotate_status.hpp"  // for toggling the rotation on and off
+
+using namespace std::chrono_literals;               // para rekta sulat na lang kung ilang seconds
+
+class turtlesim_ex2_node : public rclcpp::Node
+{
+public:
+    turtlesim_ex2_node() : Node("turtlesim_ex2")
+    {
+//--------------------INTERNAL VARIABLES--------------------//
+        // declare parameters as default values
+        this->declare_parameter("x", 8.5);                                                     // turtle2 x coordinate
+        this->declare_parameter("y", 2.75);                                                    // turtle2 y coordinate
+        this->declare_parameter("theta", 0.0);                                                 // turtle2 z rotation
+
+        this->declare_parameter("v_linear_x", 1.0);                                              // linear velocity
+        this->declare_parameter("v_angular_z", 0.0);                                             // angular velocity         
+
+        // use declared parameters within the code
+        x = this->get_parameter("x").as_double();
+        y = this->get_parameter("y").as_double();
+        theta = this->get_parameter("theta").as_double();
+        
+        v_linear = this->get_parameter("v_linear_x").as_double();
+        v_angular = this->get_parameter("v_angular_z").as_double();
+
+
+//--------------------CLIENTS--------------------//
+        // create turtle2
+        spawn_client_= this->create_client<turtlesim::srv::Spawn>("/spawn");
+
+        // create pen client that will execute its toggling (kung nakaangat ba or hindi pag magddrawing)
+        pen_client_ = this->create_client<turtlesim::srv::SetPen>("/turtle1/set_pen");
+
+        // create a teleport client that will execute the drawing of the lines when the pen is down
+        teleport_client_ = this->create_client<turtlesim::srv::TeleportAbsolute>("/turtle1/teleport_absolute");
+
+
+//--------------------PUBLISHERS--------------------//
+        // publish to rotate turtle2
+        rotate_turt_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle2/cmd_vel", 10);
+
+
+//--------------------SUBSCRIBERS--------------------//
+        // subscribe to turtle2's position via pose
+        turtle2_pose_sub_ = this->create_subscription<turtlesim::msg::Pose>("/turtle2/pose",
+            10,
+            [this](turtlesim::msg::Pose::SharedPtr turtle2_pose)
+            {
+                rotate_turtle2_callback(turtle2_pose);                                          // callback for detecting turtle1 if in bounds and rotating turtle2
+            }
+        );
+
+        // subscribe to turtle1's position via pose
+        turtle1_pose_sub_ = this->create_subscription<turtlesim::msg::Pose>("/turtle1/pose",
+            10,
+            [this](turtlesim::msg::Pose::SharedPtr turtle1_pose)
+            {
+                get_turtle2_bounds(turtle1_pose);                                               // callback for identifying turtle2's quadrant
+            }
+        );
+
+        // create a client to a service that can toggle the rotation on and off
+        rotate_sub_ = this->create_subscription<turtle_interfaces::msg::RotateStatus> ("/rotate_status",
+            10,
+            [this](turtle_interfaces::msg::RotateStatus::SharedPtr msg)
+            {
+                rotate_status = msg->toggle;
+                RCLCPP_INFO(this->get_logger(), "Recieved rotation params: %d (%s)", rotate_status, msg->message.c_str());
+            }
+        );       
+
+//--------------------PUBLIC CALLBACKS--------------------//
+        // return a message when v_linear and v_angular is out of bounds
+        param_callback_ = this->add_on_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> &params)->rcl_interfaces::msg::SetParametersResult
+            {
+                auto result = check_param_values(params);
+                return result;
+            }
+        );
+        
+
+        // Wait for following services to be available, which comes from the turtle1
+        while (!pen_client_->wait_for_service(1s) ||
+               !teleport_client_->wait_for_service(1s) ||
+               !spawn_client_->wait_for_service(1s))
+        {
+            RCLCPP_INFO(this->get_logger(), "Waiting for turtlesim services...");
+        }
+    }
+
+
+//--------------------PUBLIC FUNCTIONS--------------------//
+    // draw the quadrant lines by defining the coordinates
+    void draw_quadrants()
+    {
+        // draw horizontal line
+        toggle_pen(false);
+        teleport_pen(0.0, 5.5, 0.0);
+        toggle_pen(true);
+        teleport_pen(11.0, 5.5, 0.0);
+        
+        // draw vertical line
+        toggle_pen(false);
+        teleport_pen(5.5, 0.0, 0.0);
+        toggle_pen(true);
+        teleport_pen(5.5, 11.0, 0.0);
+
+        // turn off pen
+        toggle_pen(0.0);
+
+        RCLCPP_INFO(get_logger(), "Drawing axes..");
+    }
+
+
+    // position turtle1 to quadrant 3
+    void position_turtle1()
+    {
+        set_position(2.75, 8.25, 0.0);
+    }
+
+
+    // spawn turtle 2
+    void spawn_turtle2()
+    {
+        spawn_and_set_position(x, y, theta, "turtle2");
+    }
+
+
+private:
+//--------------------CLIENT VARIABLES--------------------//
+    rclcpp::Client<turtlesim::srv::SetPen>::SharedPtr pen_client_;
+    rclcpp::Client<turtlesim::srv::TeleportAbsolute>::SharedPtr teleport_client_;
+    rclcpp::Client<turtlesim::srv::Spawn>::SharedPtr spawn_client_;
+
+
+//--------------------SUBSCRIPTION VARIABLES--------------------//
+    rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle1_pose_sub_;
+    rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle2_pose_sub_;
+    rclcpp::Subscription<turtle_interfaces::msg::RotateStatus>::SharedPtr rotate_sub_;
+
+
+//--------------------PUBLISHER VARIABLES--------------------//
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr rotate_turt_pub_;
+
+
+//--------------------INTERFACES--------------------//
+    geometry_msgs::msg::Twist rotate_turt;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_;
+    rcl_interfaces::msg::SetParametersResult param_result;
+
+    
+//--------------------PRIMITIVES--------------------//
+    float x;
+    float y;
+    float theta;
+    float v_linear;
+    float v_angular;
+    int quadrant;
+    bool rotate_status;
+
+    
+    // toggle the pen client to turn on and off
+    void toggle_pen(bool status)
+    {
+        // create a shared pointer named pen_status that points to the instance of the message template for defining the properties of the pen
+        auto pen_status = std::make_shared<turtlesim::srv::SetPen::Request>();
+
+        // white color axes lines
+        pen_status->r = 255;                                                                    // uint8
+        pen_status->g = 255;                                                                    // uint8
+        pen_status->b = 255;                                                                    // uint8
+
+        // pen width
+        pen_status->width = 3;                                                                  // uint8
+
+        // pen toggle: val ? true : false
+        pen_status->off = status ? 0 : 1;                                                       // use ternary operator to avoid if/else condition. If 1, off. if 0, on (draw).
+
+        //  send a request to the client and wait for the service response
+        auto pen_response = pen_client_->async_send_request(pen_status);                        // hold the acknowledgement status from the service response
+        rclcpp::spin_until_future_complete(this->get_node_base_interface(), pen_response);      // use the acknowledgement status to wait
+
+        // note to self: get_node_base_interface() is a method inside the class responsible for spinning. that is what is being monitored
+    }
+
+    
+    // draw using teleport_absolute based on the status of the pen
+    void teleport_pen(float x, float y, float theta)
+    {
+        // create a shared pointer the instane of the message template for defining the coordinates when drawing
+        auto teleport_params = std::make_shared<turtlesim::srv::TeleportAbsolute::Request>();
+        teleport_params->x = x;                                                                  // float32
+        teleport_params->y = y;                                                                  // float32
+        teleport_params->theta = theta;                                                          // float32
+
+        // execute drawing and spin the node until response is recieved
+        auto teleport_response = teleport_client_->async_send_request(teleport_params);
+        rclcpp::spin_until_future_complete(this->get_node_base_interface(), teleport_response);
+    }
+
+
+    // set the position of turtle1 to Q2
+    void set_position(float x, float y, float theta)
+    {
+        toggle_pen(false);
+        teleport_pen(x, y, theta);
+    }
+
+
+    // identify which quadrant is turtle2 located
+    void get_turtle2_bounds(turtlesim::msg::Pose::SharedPtr msg)
+    {
+        if (msg->x >= 5.5 && msg->y < 5.5)
+        {
+            quadrant = 4;
+        }
+
+        else if (msg->x >= 5.5 && msg->y >= 5.5)
+        {
+            quadrant = 1;
+        }
+
+        else if (msg->x < 5.5 && msg->y >= 5.5)
+        {
+            quadrant = 2;
+        }
+
+        else if (msg->x < 5.5 && msg->y < 5.5)
+        {
+            quadrant = 3;
+        }
+    }
+
+    
+    // rotate turtle2 based on which quadrant it is located w.r.t turtle1's position
+    void rotate_turtle2_callback(turtlesim::msg::Pose::SharedPtr msg)
+    {
+        if (rotate_status == false)
+        {
+            // quadrant 4
+            if (quadrant == 4 && (msg->x >= 5.5 && msg->x <= 11) && (msg->y < 5.5 && msg->y >= 0.0))
+            {
+                rotate_turt.linear.x = 0.5;
+                rotate_turt.angular.z = 1.0;
+                rotate_turt_pub_->publish(rotate_turt);
+            }
+
+            // quadrant 1
+            if (quadrant == 1 && (msg->x >= 5.5 && msg->x <= 11) && (msg->y >= 5.5 && msg->y <= 11))
+            {
+                rotate_turt.linear.x = 0.5;
+                rotate_turt.angular.z = 1.0;
+                rotate_turt_pub_->publish(rotate_turt);
+            }
+
+            // quadrant 2
+            if (quadrant == 2 && (msg->x <= 5.5 && msg->x >= 0.0) && (msg->y >= 5.5 && msg->y <= 11))
+            {
+                rotate_turt.linear.x = 0.5;
+                rotate_turt.angular.z = 1.0;
+                rotate_turt_pub_->publish(rotate_turt);
+            }
+
+            // quadrant 3
+            if (quadrant == 3 && (msg->x <= 5.5 && msg->x >= 0.0) && (msg->y < 5.5 && msg->y >= 0.0))
+            {
+                rotate_turt.linear.x = 0.5;
+                rotate_turt.angular.z = 1.0;
+                rotate_turt_pub_->publish(rotate_turt);
+            }
+        }
+
+    }
+
+    // spawn the 2nd turtle and position in correct quadrant
+    void spawn_and_set_position(float x, float y, float theta, const std::string &name)
+    {
+        auto turtle_params = std::make_shared<turtlesim::srv::Spawn::Request>();
+        turtle_params->x = x;
+        turtle_params->y = y;
+        turtle_params->theta = theta;
+        turtle_params->name = name;
+
+        auto turtle_response = spawn_client_->async_send_request(turtle_params);
+        rclcpp::spin_until_future_complete(this->get_node_base_interface(), turtle_response);
+    }
+
+    // create a callback for the linear and angular velocity
+    rcl_interfaces::msg::SetParametersResult check_param_values(const std::vector<rclcpp::Parameter> params)
+    {
+        param_result.successful = true;
+        param_result.reason = "All parameters valid";
+        for (const auto &param : params) 
+        {
+            if (param.get_name() == "v_linear_x") 
+            {
+                double param_value = param.as_double();
+                if (param_value < 0.0 || param_value > 3.0)
+                {
+                    param_result.successful = false;
+                    param_result.reason = "linear velocity must be between 0.0 - 3.0";
+                    RCLCPP_ERROR(this->get_logger(), "%s", param_result.reason.c_str());
+                }
+            }
+
+            else if (param.get_name() == "v_angular_z") {
+                double param_value = param.as_double();
+                if (param_value < 0.0 || param_value > 1.0)
+                {
+                    param_result.successful = false;
+                    param_result.reason = "angular velocity must be between 0.0 - 1.0";
+                    RCLCPP_ERROR(this->get_logger(), "%s", param_result.reason.c_str());
+                }
+            }
+        }
+
+        return param_result;
+    }
+
+    // void rotation_callback(const turtle_interfaces::msg::RotateStatus::SharedPtr response)
+    // {
+    //     rotate_status = response->toggle;
+    //     RCLCPP_INFO(this->get_logger(), "Recieved rotation params: %d (%s)", rotate_status, response->message.c_str());
+    // }
+};
+
+int main(int argc, char **argv)
+{
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<turtlesim_ex2_node>(); // MODIFY NAME
+    std::this_thread::sleep_for(0.25s);
+    node->draw_quadrants();
+    std::this_thread::sleep_for(0.25s);
+    node->position_turtle1();
+    std::this_thread::sleep_for(0.25s);
+    node->spawn_turtle2();
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    return 0;
+}

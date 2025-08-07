@@ -1,0 +1,13 @@
+<launch>
+<!-- spawn turlte2 -->
+    <node pkg="turtle_cpp_pkg" exec="turtlesim_ex1_spawn">
+    </node>
+
+<!-- run turtlesim node -->
+    <node pkg="turtlesim" exec="turtlesim_node">
+    </node>
+
+<!-- run initializer -->
+    <node pkg="turtle_cpp_pkg" exec="turtlesim_ex1_initialize">
+    </node>
+</launch>

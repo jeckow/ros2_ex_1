@@ -1,0 +1,7 @@
+/turtlesim_ex1_spawn:
+  ros__parameters:
+    x: 2.75
+    y: 2.75
+    theta: 0.0
+    v_linear_x: 1.5
+    v_angular_z: .5

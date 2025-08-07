@@ -1,0 +1,4 @@
+bool rotation_status
+---
+bool toggle
+string message

@@ -1,0 +1,8 @@
+<launch>
+<!-- spawn turlte2 -->
+    <node pkg="turtle_cpp_pkg" exec="turtlesim_ex1_spawn">
+        <param from="$(find-pkg-share turtle_bringup)/config/turtle2_config.yaml" />
+        <param name="v_linear_x" value="2.0" />
+        <param name="v_angular_z" value="0.75" />
+    </node>
+</launch>

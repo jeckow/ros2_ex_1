@@ -1,0 +1,4 @@
+<launch>
+    <include file="$(find-pkg-share turtle_bringup)/launch/turtle_ex1_launch3.xml" />
+    <include file="$(find-pkg-share turtle_bringup)/launch/turtle_ex1_launch1.xml" />   
+</launch>
