@@ -7,11 +7,33 @@
 
 using namespace std::chrono_literals;       // para rekta sulat na lang kung ilang seconds
 
+/*
+FUNCTIONS REFERENCE:
+
+    draw_quadrants() -  uses turtle1 to draw the x and y axes
+        - toggle_pen() - toggles whether turtle1 will draw or not
+        - teleport_turtle() - teleports turtle1 to a different location. Used along with toggle_pen() to draw axes
+
+    position_turtle1() - locates turtle1 to a different part of the coordinate space
+        - set_position() - positions turtle2 to a different location
+
+    get_turtle2_bounds() - gets the bounds of the quadrant where turtle2 is located
+    
+    rotate_turtle2_callback() - rotates turtle2 w.r.t turtle1 and its quadrant
+
+    spawn_turtle2() - spawns turlte2
+        - spawn_and_set_position(**args) - spawns turtle2 given a specific location
+
+    check_param_values() -  checks if the parameter values from the service request are valid
+*/
+
+
 class turtlesim_ex1_node : public rclcpp::Node
 {
 public:
     turtlesim_ex1_node() : Node("turtlesim_ex1")
     {
+//--------------------PARAMETERIZATIONS--------------------//  
         // declare parameters as default values
         this->declare_parameter("x", 8.5);                                                     // turtle2 x coordinate
         this->declare_parameter("y", 2.75);                                                    // turtle2 y coordinate
@@ -29,6 +51,7 @@ public:
         v_angular = this->get_parameter("v_angular_z").as_double();
 
 
+//--------------------CLIENTS--------------------//
         // create turtle2
         spawn_client_= this->create_client<turtlesim::srv::Spawn>("/spawn");
 
@@ -38,6 +61,8 @@ public:
         // create a teleport client that will execute the drawing of the lines when the pen is down
         teleport_client_ = this->create_client<turtlesim::srv::TeleportAbsolute>("/turtle1/teleport_absolute");
 
+
+//--------------------PUBLISHERS--------------------//
         // publish to rotate turtle2
         rotate_turt_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle2/cmd_vel", 10);
 
@@ -59,6 +84,8 @@ public:
             }
         );
 
+
+//--------------------CALLBACKS-------------------//
         // return a message when v_linear and v_angular is out of bounds
         param_callback_ = this->add_on_set_parameters_callback(
             [this](const std::vector<rclcpp::Parameter> &params)->rcl_interfaces::msg::SetParametersResult
@@ -79,6 +106,7 @@ public:
     }
 
 
+//--------------------PUBLICLY AVAILABLE FUNCTIONS--------------------//
     // draw the quadrant lines by defining the coordinates
     void draw_quadrants()
     {
@@ -116,14 +144,24 @@ public:
 
 
 private:
+//--------------------CLIENT INSTANCES--------------------//
     // initialize derived variables
     rclcpp::Client<turtlesim::srv::SetPen>::SharedPtr pen_client_;
     rclcpp::Client<turtlesim::srv::TeleportAbsolute>::SharedPtr teleport_client_;
+    rclcpp::Client<turtlesim::srv::Spawn>::SharedPtr spawn_client_;
+
+
+//--------------------SUBSCRIPTION INSTANCES--------------------//
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle1_pose_sub_;
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle2_pose_sub_;
+
+
+//--------------------PUBLISHER INSTANCES--------------------//
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr rotate_turt_pub_;
+    
+
+//--------------------INTERFACES--------------------//
     geometry_msgs::msg::Twist rotate_turt;
-    rclcpp::Client<turtlesim::srv::Spawn>::SharedPtr spawn_client_;
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_;
     rcl_interfaces::msg::SetParametersResult param_result;
     
@@ -136,6 +174,7 @@ private:
     int quadrant;
 
     
+//--------------------PRIVATE FUNCTIONS--------------------//
     // toggle the pen client to turn on and off
     void toggle_pen(bool status)
     {
@@ -291,6 +330,8 @@ private:
     } 
 };
 
+
+//--------------------MAIN--------------------//
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);

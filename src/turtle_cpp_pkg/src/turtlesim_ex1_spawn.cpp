@@ -1,13 +1,24 @@
 #include "rclcpp/rclcpp.hpp"
-#include "turtlesim/srv/spawn.hpp"                  // for creating turtle2
+#include "turtlesim/srv/spawn.hpp"                                                             // for creating turtle2
 
-using namespace std::chrono_literals;       // para rekta sulat na lang kung ilang seconds
+using namespace std::chrono_literals;                                                          // para rekta sulat na lang kung ilang seconds
+
+/*
+FUNCTIONS REFERENCE:
+
+    spawn_turtle2() - spawns turlte2
+        - spawn_and_set_position(**args) - spawns turtle2 given a specific location
+
+    check_param_values() -  checks if the parameter values from the service request are valid
+*/
+
 
 class turtlesim_ex1_node : public rclcpp::Node
 {
 public:
     turtlesim_ex1_node() : Node("turtlesim_ex1_spawn")
     {
+//--------------------PARAMETERIZATIONS--------------------//
         // declare parameters as default values
         this->declare_parameter("x", 8.5);                                                     // turtle2 x coordinate
         this->declare_parameter("y", 2.75);                                                    // turtle2 y coordinate
@@ -24,9 +35,13 @@ public:
         v_linear = this->get_parameter("v_linear_x").as_double();
         v_angular = this->get_parameter("v_angular_z").as_double();
 
+
+//--------------------CLIENTS--------------------//
         // create turtle2
         spawn_client_= this->create_client<turtlesim::srv::Spawn>("/spawn");
 
+
+//--------------------CALLBACKS--------------------//
         // return a message when v_linear and v_angular is out of bounds
         param_callback_ = this->add_on_set_parameters_callback(
             [this](const std::vector<rclcpp::Parameter> &params)->rcl_interfaces::msg::SetParametersResult
@@ -43,7 +58,8 @@ public:
         }
     }
 
-    
+
+//--------------------PUBLIC FUNCTIONS--------------------//
     // spawn turtle 2
     void spawn_turtle2()
     {
@@ -52,11 +68,13 @@ public:
 
 
 private:
+//--------------------CDERIVED VARIABLES--------------------//
     // initialize private variables
     rclcpp::Client<turtlesim::srv::Spawn>::SharedPtr spawn_client_;
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_;
     rcl_interfaces::msg::SetParametersResult param_result;
 
+//--------------------PRIMITIVES--------------------//
     float x;
     float y;
     float theta;
@@ -111,6 +129,8 @@ private:
     } 
 };
 
+
+//--------------------MAIN--------------------//
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);

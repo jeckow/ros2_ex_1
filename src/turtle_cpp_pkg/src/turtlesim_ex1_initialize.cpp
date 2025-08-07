@@ -6,28 +6,50 @@
 
 using namespace std::chrono_literals;       // para rekta sulat na lang kung ilang seconds
 
+
+/*
+FUNCTIONS REFERENCE:
+
+    draw_quadrants() -  uses turtle1 to draw the x and y axes
+        - toggle_pen() - toggles whether turtle1 will draw or not
+        - teleport_turtle() - teleports turtle1 to a different location. Used along with toggle_pen() to draw axes
+
+    position_turtle1() - locates turtle1 to a different part of the coordinate space
+        - set_position() - positions turtle2 to a different location
+
+    get_turtle2_bounds() - gets the bounds of the quadrant where turtle2 is located
+    
+    rotate_turtle2_callback() - rotates turtle2 w.r.t turtle1 and its quadrant
+
+*/
+
+
 class turtlesim_ex1_node : public rclcpp::Node
 {
 public:
     turtlesim_ex1_node() : Node("turtlesim_ex1")
     {
+//--------------------CLIENTS-------------------//
         // create pen client that will execute the toggling status of the pen (kung nakaangat ba or hindi pag magddrawing)
         pen_client_ = this->create_client<turtlesim::srv::SetPen>("/turtle1/set_pen");
 
         // create a teleport client that will execute the drawing of the lines when the pen is down
         teleport_client_ = this->create_client<turtlesim::srv::TeleportAbsolute>("/turtle1/teleport_absolute");
 
+//--------------------PUBLISHERS--------------------//
         // publish to rotate turtle
         rotate_turt_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/turtle2/cmd_vel", 10);
         rotate_turt.angular.z = 0.0;
         rotate_turt_pub_->publish(rotate_turt);
 
+
+//--------------------SUBSCRIBERS--------------------//
         // subscribe to turtle2's position via pose
         turtle2_pose_sub_ = this->create_subscription<turtlesim::msg::Pose>("/turtle2/pose",
             10,
             [this](turtlesim::msg::Pose::SharedPtr turtle2_pose)
             {
-                rotate_turtle2_callback(turtle2_pose);                                          // call back for detecting and rotating
+                rotate_turtle2_callback(turtle2_pose);                                              // callback for detecting and rotating
             }
         );
 
@@ -36,7 +58,7 @@ public:
             10,
             [this](turtlesim::msg::Pose::SharedPtr turtle1_pose)
             {
-                get_turtle2_bounds(turtle1_pose);                                          // call back for detecting and rotating
+                get_turtle2_bounds(turtle1_pose);                                                   // callback for detecting and rotating
             }
         );
 
@@ -49,6 +71,7 @@ public:
     }
 
 
+//--------------------PUBLICLY ACCESSIBLE FUNCTIONS--------------------//
     // draw the quadrant lines by defining the coordinates
     void draw_quadrants()
     {
@@ -79,12 +102,19 @@ public:
 
     
 private:
+//--------------------CLIENT INITIALIZATIONS--------------------//
     // initialize private variables
     rclcpp::Client<turtlesim::srv::SetPen>::SharedPtr pen_client_;
     rclcpp::Client<turtlesim::srv::TeleportAbsolute>::SharedPtr teleport_client_;
+    
+//--------------------SUBSCRIBER INITIALIZATIONS--------------------//
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle1_pose_sub_;
     rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr turtle2_pose_sub_;
+
+//--------------------PUBLISHERS--------------------//
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr rotate_turt_pub_;
+
+//--------------------DERIVED AND PRIMITIVES--------------------//
     geometry_msgs::msg::Twist rotate_turt;
     int quadrant;
 
@@ -200,6 +230,7 @@ private:
 };
 
 
+//--------------------MAIN-------------------//
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);

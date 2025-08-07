@@ -8,12 +8,34 @@
 
 using namespace std::chrono_literals;               // para rekta sulat na lang kung ilang seconds
 
+
+/*
+FUNCTIONS REFERENCE:
+
+    draw_quadrants() -  uses turtle1 to draw the x and y axes
+        - toggle_pen() - toggles whether turtle1 will draw or not
+        - teleport_turtle() - teleports turtle1 to a different location. Used along with toggle_pen() to draw axes
+
+    position_turtle1() - locates turtle1 to a different part of the coordinate space
+        - set_position() - positions turtle2 to a different location
+
+    get_turtle2_bounds() - gets the bounds of the quadrant where turtle2 is located
+    
+    rotate_turtle2_callback() - rotates turtle2 w.r.t turtle1 and its quadrant
+
+    spawn_turtle2() - spawns turlte2
+        - spawn_and_set_position(**args) - spawns turtle2 given a specific location
+
+    check_param_values() -  checks if the parameter values from the service request are valid
+*/
+
+
 class turtlesim_ex2_node : public rclcpp::Node
 {
 public:
     turtlesim_ex2_node() : Node("turtlesim_ex2")
     {
-//--------------------INTERNAL VARIABLES--------------------//
+//--------------------PARAMETERIZATIONS--------------------//
         // declare parameters as default values
         this->declare_parameter("x", 8.5);                                                     // turtle2 x coordinate
         this->declare_parameter("y", 2.75);                                                    // turtle2 y coordinate
@@ -166,7 +188,8 @@ private:
     int quadrant;
     bool rotate_status;
 
-    
+
+//--------------------PRIVATE FUNCTIONS--------------------//
     // toggle the pen client to turn on and off
     void toggle_pen(bool status)
     {
